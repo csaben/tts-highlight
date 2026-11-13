@@ -25,7 +25,9 @@ After editing files, hit the reload icon on the extension card (and refresh open
 
 - Clark: `clark-voice.service`, :50300, GPU 0, `ckpt/clark`.
 - Baldree: `baldree-voice.service`, :50301, GPU 1, `ckpt/baldree` (unit created 2026-11-13 by
-  copying clark-voice's unit). Its `/llms.txt` still says "Clark" because the text is hardcoded
+  copying clark-voice's unit). Versioned copy in `cradle/baldree-voice.service`; to reinstall:
+  `scp cradle/baldree-voice.service <user>@<gpu-host>:.config/systemd/user/` then
+  `systemctl --user daemon-reload && systemctl --user enable --now baldree-voice`. Its `/llms.txt` still says "Clark" because the text is hardcoded
   in `tts_dots/service.py`.
 - Both are `~/Code/tts-workspace/dots-tts` `python -m tts_dots.service`, `POST /synthesize`.
   Each sentence takes about 1–2 s at 16 steps, about 0.9 s at 8 steps (popup → Servers → Quality).
@@ -33,9 +35,13 @@ After editing files, hit the reload icon on the extension card (and refresh open
 ## Read from here (eager index, lazy compute)
 
 Each frame indexes its page into sentences on idle (re-indexes 1 s after DOM mutations),
-skipping `nav, footer, aside, pre, code, [aria-hidden]`. Alt+click text, or right-click (no
-selection) → "Read from here", starts at that sentence and continues to the end of the page.
-Only audio is lazy: offscreen fetches 3 sentences ahead. `test/fromhere.mjs` covers it.
+skipping `nav, footer, aside, pre, code, [aria-hidden]`, and groups sentences into blocks
+(nearest non-inline ancestor: paragraph, heading, list item). Holding Alt (150 ms, so shortcuts
+don't flash it) previews: dotted blue underline = everything indexed, blue fill = the block
+under the mouse. Alt+click (or right-click, no selection → "Read from here") starts at the
+*start of that block* and continues to the end of the page; the player parks at the right edge
+level with the click. Only audio is lazy: offscreen fetches 3 sentences ahead.
+`test/fromhere.mjs` covers it.
 
 Player drag: pointerdown anywhere on the pill (buttons too); past 4 px it becomes a drag and
 the click is swallowed. Move/up listeners are on `window`, not the pill, or a fast first move

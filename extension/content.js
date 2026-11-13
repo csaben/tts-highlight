@@ -54,7 +54,7 @@
       const block = blockOf(n.parentElement, cache);
       if (prevBlock && block !== prevBlock) full += "\n";
       prevBlock = block;
-      pieces.push({ node: n, nodeStart: a, start: full.length, end: full.length + (b - a) });
+      pieces.push({ node: n, nodeStart: a, start: full.length, end: full.length + (b - a), block });
       full += n.data.slice(a, b);
     }
     return { full, pieces };
@@ -170,7 +170,11 @@
     if (ui) return ui;
     const host = document.createElement("div");
     host.style.cssText = "all:initial;position:fixed;z-index:2147483647;right:18px;bottom:18px;";
-    if (anchor && (anchor.width || anchor.height)) {
+    if (anchor && anchor.side) {
+      // read-from-here: park at the right edge, level with the click, out of the text
+      host.style.top = Math.min(window.innerHeight - 50, Math.max(8, anchor.y - 18)) + "px";
+      host.style.bottom = "auto";
+    } else if (anchor && (anchor.width || anchor.height)) {
       // just right of / below where the selection ended, clamped into the viewport
       const x = Math.min(window.innerWidth - 330, Math.max(8, anchor.right + 10));
       const y = Math.min(window.innerHeight - 50, Math.max(8, anchor.bottom + 8));
@@ -294,7 +298,24 @@
     r.selectNodeContents(document.body);
     const { full, pieces } = collect(r, true);
     pageIdx = full.trim() && pieces.length ? buildDoc(full, pieces) : null;
+    if (pageIdx) {
+      // group sentences into blocks (paragraph / heading / list item ...)
+      const blocks = [];
+      const nodeIdx = new Map(pieces.map((p, i) => [p.node, i]));
+      let pi = 0;
+      pageIdx.segs.forEach((s, i) => {
+        while (pi + 1 < pieces.length && pieces[pi].end <= s.start) pi++;
+        const el = pieces[pi].block;
+        const last = blocks[blocks.length - 1];
+        if (last && last.el === el) { last.last = i; last.end = s.end; }
+        else blocks.push({ el, first: i, last: i, start: s.start, end: s.end });
+        s.block = blocks.length - 1;
+      });
+      pageIdx.blocks = blocks;
+      pageIdx.nodeIdx = nodeIdx;
+    }
     pageDirty = false;
+    if (previewOn) paintIndexed();
   }
   function scheduleIndex() {
     pageDirty = true;
@@ -328,29 +349,106 @@
     return p.node === node ? p.start + Math.max(0, Math.min(offset - p.nodeStart, p.end - p.start)) : p.start;
   }
 
-  async function readFrom(x, y) {
+  // block under a screen point, or -1 (only real indexed text counts, not nav/code/gaps)
+  function blockAt(x, y) {
     if (pageDirty || !pageIdx) indexPage();
-    if (!pageIdx) return false;
+    if (!pageIdx) return -1;
     const c = caretAt(x, y);
-    if (!c) return false;
-    const pos = pieceAt(pageIdx.pieces, c[0], c[1]);
-    if (pos < 0) return false;
-    const i = pageIdx.segs.findIndex((s) => s.end > pos);
-    if (i < 0) return false;
-    await startDoc({ ...pageIdx, segs: pageIdx.segs.slice(i) }, { right: x, bottom: y, width: 1, height: 1 });
+    if (!c) return -1;
+    let [node, off] = c;
+    if (node.nodeType !== 3) { node = node.childNodes[off] || node; off = 0; }
+    const pi = pageIdx.nodeIdx.get(node);
+    if (pi === undefined) return -1;
+    // the caret snaps to the nearest text even in margins: require the point to be on the block
+    const p = pageIdx.pieces[pi];
+    const r = p.block.getBoundingClientRect();
+    if (x < r.left - 4 || x > r.right + 4 || y < r.top - 4 || y > r.bottom + 4) return -1;
+    const pos = p.start + Math.max(0, Math.min(off - p.nodeStart, p.end - p.start));
+    let lo = 0, hi = pageIdx.segs.length - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (pageIdx.segs[m].end < pos) lo = m + 1; else hi = m; }
+    return pageIdx.segs[lo] ? pageIdx.segs[lo].block : -1;
+  }
+
+  async function readBlock(b, y) {
+    const blk = pageIdx.blocks[b];
+    await startDoc({ ...pageIdx, segs: pageIdx.segs.slice(blk.first) }, { side: true, y });
     return true;
   }
 
+  async function readFrom(x, y) {
+    const b = blockAt(x, y);
+    return b < 0 ? false : readBlock(b, y);
+  }
+
+  // ---- Alt preview: hold Alt to see what's indexed + which block a click would start at ----
+
+  let previewOn = false, altTimer = 0, hoverBlock = -1, mouse = [0, 0], hoverRaf = 0;
+
+  function paintIndexed() {
+    if (!hasHL || !pageIdx) return;
+    const rs = [];
+    for (const b of pageIdx.blocks) { const r = makeRangeIn(pageIdx, b.start, b.end); if (r) rs.push(r); }
+    CSS.highlights.set("tts-indexed", new Highlight(...rs));
+  }
+  function makeRangeIn(d, start, end) {
+    const saved = doc; doc = d;
+    try { return makeRange(start, end); } finally { doc = saved; }
+  }
+  function paintHover() {
+    hoverRaf = 0;
+    if (!previewOn || !hasHL) return;
+    const b = blockAt(mouse[0], mouse[1]);
+    if (b === hoverBlock) return;
+    hoverBlock = b;
+    document.documentElement.style.cursor = b >= 0 ? "pointer" : "";
+    if (b < 0) { CSS.highlights.delete("tts-preview"); return; }
+    const blk = pageIdx.blocks[b];
+    const r = makeRangeIn(pageIdx, blk.start, blk.end);
+    if (r) CSS.highlights.set("tts-preview", new Highlight(r));
+  }
+  function showPreview() {
+    if (previewOn || !document.body) return;
+    previewOn = true;
+    if (pageDirty || !pageIdx) indexPage();
+    paintIndexed();
+    hoverBlock = -2;
+    paintHover();
+  }
+  function hidePreview() {
+    clearTimeout(altTimer);
+    if (!previewOn) return;
+    previewOn = false;
+    hoverBlock = -1;
+    document.documentElement.style.cursor = "";
+    if (hasHL) { CSS.highlights.delete("tts-indexed"); CSS.highlights.delete("tts-preview"); }
+  }
+
+  document.addEventListener("pointermove", (e) => {
+    mouse = [e.clientX, e.clientY];
+    if (previewOn && !hoverRaf) hoverRaf = requestAnimationFrame(paintHover);
+  }, true);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Alt" && !e.repeat && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+      clearTimeout(altTimer);
+      altTimer = setTimeout(showPreview, 150); // a quick Alt+Shift+R etc. never flashes it
+    } else if (e.key !== "Alt") hidePreview();
+  }, true);
+  window.addEventListener("keyup", (e) => { if (e.key === "Alt") hidePreview(); }, true);
+  window.addEventListener("blur", hidePreview);
+
   let lastCtx = null;
   document.addEventListener("contextmenu", (e) => (lastCtx = [e.clientX, e.clientY]), true);
-  // Alt+click on text: read from that sentence to the end of the page
+  // Alt+click on an indexed block: read from the start of that block to the end of the page
   document.addEventListener("click", (e) => {
     if (!e.altKey || e.shiftKey || e.ctrlKey || e.metaKey || e.button !== 0) return;
     const t = e.target;
     if (t && t.closest && t.closest("input, textarea, select, [contenteditable=true]")) return;
+    const b = blockAt(e.clientX, e.clientY);
+    if (b < 0) return;
     e.preventDefault(); // Alt+click on a link would otherwise download it
     e.stopPropagation();
-    readFrom(e.clientX, e.clientY);
+    hidePreview();
+    readBlock(b, e.clientY);
   }, true);
 
   async function start(text) {

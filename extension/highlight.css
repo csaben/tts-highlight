@@ -5,3 +5,12 @@
   background-color: rgba(255, 170, 0, 0.75);
   color: #000;
 }
+/* hold Alt: everything that's indexed, and the block a click would start at */
+::highlight(tts-indexed) {
+  text-decoration: underline dotted rgba(60, 140, 255, 0.8);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+::highlight(tts-preview) {
+  background-color: rgba(60, 140, 255, 0.28);
+}

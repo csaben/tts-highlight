@@ -1,0 +1,27 @@
+[Unit]
+# Fine-tuned dots.tts Travis Baldree voice (used by tts-highlight Chrome ext). POST text -> audio bytes.
+# Model preloads + torch.compiles on start (~1 min warm, ~8 GB VRAM on GPU1) and
+# stays resident. For shared-GPU mode set DOTS_IDLE_UNLOAD=900 (lazy load/unload).
+# Code: ~/Code/tts-workspace/dots-tts (src/tts_dots/service.py)
+Description=baldree-voice (dots.tts fine-tune, Travis Baldree) on :50301
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Code/tts-workspace/dots-tts
+Environment=CUDA_VISIBLE_DEVICES=1
+Environment=DOTS_PORT=50301
+Environment=DOTS_MODEL=%h/Code/tts-workspace/dots-tts/ckpt/baldree
+Environment=DOTS_PUBLIC_URL=http://localhost:50301
+Environment=DOTS_IDLE_UNLOAD=0
+Environment=DOTS_PRELOAD=1
+Environment=DOTS_OPTIMIZE=1
+Environment=TORCHINDUCTOR_CACHE_DIR=%h/.cache/dots-tts-inductor
+Environment=PATH=%h/Code/tts-workspace/dots-tts/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/Code/tts-workspace/dots-tts/.venv/bin/python -m tts_dots.service
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
