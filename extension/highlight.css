@@ -1,0 +1,7 @@
+::highlight(tts-sentence) {
+  background-color: rgba(255, 214, 0, 0.22);
+}
+::highlight(tts-word) {
+  background-color: rgba(255, 170, 0, 0.75);
+  color: #000;
+}
