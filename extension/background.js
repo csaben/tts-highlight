@@ -173,3 +173,51 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     return true;
   }
 });
+
+// ---- dev auto-reload (unpacked installs only) ---------------------------------------------
+// Unpacked extensions serve their files straight from disk, so the worker can fetch its own
+// files, notice an edit, and chrome.runtime.reload() itself. On reload ("update"), the content
+// script is re-injected into open tabs, so no tab refresh is needed either.
+const WATCH = ["manifest.json", "background.js", "content.js", "segment.js", "offscreen.js",
+  "offscreen.html", "popup.html", "popup.js", "highlight.css"];
+
+async function fingerprint() {
+  const parts = await Promise.all(WATCH.map((f) =>
+    fetch(chrome.runtime.getURL(f), { cache: "no-store" }).then((r) => r.text(), () => "")));
+  const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(parts.join("\0")));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+let devPending = null;
+async function devCheck() {
+  const { devFp } = await chrome.storage.local.get("devFp");
+  const fp = await fingerprint();
+  if (!devFp) return chrome.storage.local.set({ devFp: fp });
+  if (fp === devFp) { devPending = null; return; }
+  // wait until the files stop changing (multi-file edits land one by one)
+  if (devPending !== fp) { devPending = fp; setTimeout(devCheck, 800); return; }
+  await chrome.storage.local.set({ devFp: fp });
+  chrome.runtime.reload();
+}
+
+async function reinjectTabs() {
+  const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*", "file:///*"] });
+  for (const t of tabs) {
+    chrome.scripting.insertCSS({ target: { tabId: t.id, allFrames: true }, files: ["highlight.css"] }).catch(() => {});
+    chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ["segment.js", "content.js"] }).catch(() => {});
+  }
+}
+
+chrome.management.getSelf().then(async (self) => {
+  if (self.installType !== "development") return;
+  chrome.alarms.create("dev-reload", { periodInMinutes: 0.5 }); // wakes a sleeping worker
+  chrome.alarms.onAlarm.addListener((a) => a.name === "dev-reload" && devCheck());
+  setInterval(devCheck, 1000); // fast path while the worker is awake
+  devCheck();
+});
+
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== "update") return;
+  await chrome.storage.local.set({ devFp: await fingerprint() });
+  reinjectTabs();
+});

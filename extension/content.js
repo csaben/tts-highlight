@@ -2,8 +2,11 @@
 // sentence + estimated-word highlights (CSS Custom Highlight API, no DOM mutation) while
 // the offscreen player reports progress. Also hosts the floating mini player.
 (() => {
-  if (window.__ttsReadAloud) return;
-  window.__ttsReadAloud = true;
+  // A reloaded extension re-injects this script into open tabs. The DOM event tells the
+  // previous (now orphaned) copy to tear itself down; events cross isolated worlds.
+  document.dispatchEvent(new CustomEvent("tts-read-aloud-reset"));
+  const life = new AbortController();
+  const sig = { capture: true, signal: life.signal };
 
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "OPTION", "TEMPLATE"]);
   const INLINE = new Set(["inline", "inline-block", "inline-flex", "contents", "ruby", "inline-grid"]);
@@ -322,9 +325,11 @@
     clearTimeout(idxTimer);
     idxTimer = setTimeout(() => idle(indexPage, { timeout: 3000 }), 1000);
   }
+  let pageObserver = null;
   if (document.body) {
     scheduleIndex();
-    new MutationObserver(scheduleIndex).observe(document.body, { childList: true, subtree: true, characterData: true });
+    pageObserver = new MutationObserver(scheduleIndex);
+    pageObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
   }
 
   function caretAt(x, y) {
@@ -426,18 +431,18 @@
   document.addEventListener("pointermove", (e) => {
     mouse = [e.clientX, e.clientY];
     if (previewOn && !hoverRaf) hoverRaf = requestAnimationFrame(paintHover);
-  }, true);
+  }, sig);
   window.addEventListener("keydown", (e) => {
     if (e.key === "Alt" && !e.repeat && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
       clearTimeout(altTimer);
       altTimer = setTimeout(showPreview, 150); // a quick Alt+Shift+R etc. never flashes it
     } else if (e.key !== "Alt") hidePreview();
-  }, true);
-  window.addEventListener("keyup", (e) => { if (e.key === "Alt") hidePreview(); }, true);
-  window.addEventListener("blur", hidePreview);
+  }, sig);
+  window.addEventListener("keyup", (e) => { if (e.key === "Alt") hidePreview(); }, sig);
+  window.addEventListener("blur", hidePreview, sig);
 
   let lastCtx = null;
-  document.addEventListener("contextmenu", (e) => (lastCtx = [e.clientX, e.clientY]), true);
+  document.addEventListener("contextmenu", (e) => (lastCtx = [e.clientX, e.clientY]), sig);
   // Alt+click on an indexed block: read from the start of that block to the end of the page
   document.addEventListener("click", (e) => {
     if (!e.altKey || e.shiftKey || e.ctrlKey || e.metaKey || e.button !== 0) return;
@@ -449,7 +454,7 @@
     e.stopPropagation();
     hidePreview();
     readBlock(b, e.clientY);
-  }, true);
+  }, sig);
 
   async function start(text) {
     const d = grabSelection(text);
@@ -478,7 +483,7 @@
     window.getSelection()?.removeAllRanges();
   }
 
-  chrome.runtime.onMessage.addListener((m, sender, reply) => {
+  function onMessage(m, sender, reply) {
     if (m.type === "tts-start") {
       const sel = window.getSelection();
       const ae = document.activeElement;
@@ -510,5 +515,15 @@
     } else if (m.ev === "done" || m.ev === "stopped") {
       finish();
     }
-  });
+  }
+  chrome.runtime.onMessage.addListener(onMessage);
+
+  document.addEventListener("tts-read-aloud-reset", () => {
+    life.abort();
+    if (pageObserver) pageObserver.disconnect();
+    clearTimeout(idxTimer);
+    hidePreview();
+    finish();
+    try { chrome.runtime.onMessage.removeListener(onMessage); } catch {}
+  }, { signal: life.signal });
 })();

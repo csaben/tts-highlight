@@ -7,7 +7,12 @@ and an estimated word highlight that follows the audio.
 ## Install
 
 chrome://extensions → Developer mode → **Load unpacked** → `D:\Code\tts-highlight\extension`.
-After editing files, hit the reload icon on the extension card (and refresh open tabs).
+Unpacked installs reload themselves: background.js fetches its own files (served live from
+disk), and ~1 s after they stop changing it calls `chrome.runtime.reload()`, then re-injects
+`content.js` into open tabs. The new copy fires a `tts-read-aloud-reset` DOM event that makes
+the orphaned old copy tear down its listeners. If the worker is asleep, a 30 s alarm catches
+it. Reloading stops any read in progress. `test/reload.mjs` covers it. Manual reload is only
+needed if background.js is broken badly enough that the watcher never runs.
 
 ## Layout
 

@@ -4,7 +4,7 @@
   "short_name": "Read Aloud",
   "version": "0.1.0",
   "description": "Highlight text, right-click, and hear it in Clark's or Travis Baldree's voice from cradle's GPUs, at your speed, with word highlighting.",
-  "permissions": ["contextMenus", "offscreen", "storage", "scripting", "tabs"],
+  "permissions": ["contextMenus", "offscreen", "storage", "scripting", "tabs", "alarms"],
   "host_permissions": ["<all_urls>", "http://localhost/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [
