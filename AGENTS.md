@@ -57,6 +57,21 @@ escapes the pill and nothing happens.
 Tests must wait for `chrome.storage` to appear in the service worker before using it: Chromium
 attaches the extension APIs a moment after the worker starts.
 
+## Math
+
+`extension/math.js` turns a formula's MathML (KaTeX `.katex`, MathJax `mjx-container`, or a
+bare `<math>`) into speech: `2^{-10}` → "2 to the minus 10", `w_q^T` → "w sub q transpose",
+`E[x]` → "the expected value of x", `\frac{a}{b}` → "ay over b", sums, roots, norms, abs,
+`f(x)` → "f of x", `[a, b]` → "a through b", `i//16` → "i floor divided by 16". In
+`collect()` each formula becomes one piece: its spoken text is what goes to the server, its
+DOM range is the whole formula (so highlight/hover treat it as a unit), and the visual spans
+and hidden MathML copy aren't read twice. Plain letters are left as letters (whisper hears
+"x sub q" fine either way); only "a" becomes "ay". Math written as plain text (`x²`, `10⁻⁵`,
+`2^-10`, `1e-5`, `×`, `≈`, `≤`, `~5%`) is handled by `plainMath()` in `segment.js`, under the
+"spell out acronyms and math symbols" toggle. `test/math.mjs` prints every conversion (TM
+post fixture + common notation) and fails on leftover raw symbols; `test/mathpage.mjs` runs
+the real post end to end, reading what was sent via `chrome.storage.session.lastSpoken`.
+
 ## Pronunciation
 
 Popup → Pronunciation: `word = respelling` per line (synced), plus an "spell out acronyms"

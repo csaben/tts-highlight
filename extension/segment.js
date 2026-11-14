@@ -86,6 +86,33 @@
 
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+  // Math written as plain text (formulas in KaTeX/MathJax are handled by math.js instead).
+  const SUP = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7",
+    "⁸": "8", "⁹": "9", "⁻": "-", "⁺": "+", "ⁿ": "n", "ⁱ": "i", "ᵀ": "T" };
+  const SYM = { "×": "times", "÷": "divided by", "≈": "approximately", "≤": "less than or equal to",
+    "≥": "greater than or equal to", "≠": "not equal to", "±": "plus or minus", "→": "to",
+    "∞": "infinity", "√": "square root of", "∑": "sum of", "∈": "in" };
+  function power(p) {
+    if (p === "2") return " squared";
+    if (p === "3") return " cubed";
+    if (p === "T") return " transpose";
+    return " to the " + p.replace(/^[-−]/, "minus ").replace(/^\+/, "");
+  }
+  function plainMath(t) {
+    // x² 10⁻⁵ Wᵀ
+    t = t.replace(/([\p{L}\p{N})\]])([⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺ⁿⁱᵀ]+)/gu, (m, b, s) =>
+      b + power([...s].map((c) => SUP[c]).join("")));
+    // 2^10, 2^-10, 2^{-10}, x^2 (only right after a number, letter or bracket)
+    t = t.replace(/([\p{L}\p{N})\]])\^\{?\(?([-−+]?(?:\d+(?:\.\d+)?|[a-zA-Z]))\)?\}?/gu, (m, b, p) => b + power(p));
+    // 1e-5, 3e4 (ML-style scientific notation)
+    t = t.replace(/\b(\d+(?:\.\d+)?)e([-−+]?)(\d+)\b/g, (m, a, s, e) => `${a} e ${s && s !== "+" ? "minus " : ""}${e}`);
+    // ~5, ~10% => "about"
+    t = t.replace(/(^|[\s(])~\s?(?=\d)/g, "$1about ");
+    // standalone symbols
+    t = t.replace(/\s?([×÷≈≤≥≠±→∞√∑∈])\s?/g, (m, c) => ` ${SYM[c]} `);
+    return t.replace(/ {2,}/g, " ");
+  }
+
   // One rule per line: "word = say it like this". Lines starting with # are ignored.
   function ttsParseLex(src) {
     const rules = [];
@@ -106,6 +133,7 @@
     for (const r of rules) text = text.replace(r.re, () => r.say);
     text = text.replace(/(?<!\.)\.\.(?!\.)/g, "."); // "A.S.A.P.." from a rule at sentence end
     if (!auto) return text;
+    text = plainMath(text);
     const letters = text.replace(/[^\p{L}]/gu, "");
     const caps = letters.replace(/[^\p{Lu}]/gu, "").length;
     if (letters.length > 12 && caps / letters.length > 0.6) return text; // SHOUTED TEXT

@@ -60,7 +60,24 @@
         return NodeFilter.FILTER_ACCEPT;
       },
     });
+    let curMath = null;
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      // A formula (KaTeX / MathJax / <math>) becomes one piece whose text is its spoken
+      // form; its other text nodes (visual spans + hidden MathML copy) are skipped.
+      const mathEl = mathOf(n.parentElement);
+      if (mathEl) {
+        if (mathEl === curMath) continue;
+        curMath = mathEl;
+        const said = speakMath(mathEl);
+        if (!said) continue;
+        const block = blockOf(mathEl.parentElement || mathEl, cache);
+        if (prevBlock && block !== prevBlock) full += "\n";
+        else if (full && !/\s$/.test(full)) full += " ";
+        prevBlock = block;
+        pieces.push({ node: n, nodeStart: 0, start: full.length, end: full.length + said.length, block, math: mathEl });
+        full += said + " ";
+        continue;
+      }
       const a = n === range.startContainer ? range.startOffset : 0;
       const b = n === range.endContainer ? range.endOffset : n.data.length;
       if (b <= a) continue;
@@ -73,6 +90,19 @@
     return { full, pieces };
   }
 
+  const MATH_ROOTS = [".katex", "mjx-container", "math"];
+  function mathOf(el) {
+    if (!el) return null;
+    for (const s of MATH_ROOTS) { const m = el.closest(s); if (m) return m; }
+    return null;
+  }
+  function speakMath(el) {
+    const ml = el.localName === "math" ? el : el.querySelector("math");
+    let said = "";
+    try { if (ml && typeof ttsMathSpeech === "function") said = ttsMathSpeech(ml); } catch {}
+    return (said || el.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
   function domAt(pieces, pos, isEnd) {
     // binary search: first piece whose end > pos (start) / >= pos (end)
     let lo = 0, hi = pieces.length - 1, ans = pieces.length - 1;
@@ -82,6 +112,7 @@
       else lo = mid + 1;
     }
     const p = pieces[ans];
+    if (p.math) return isEnd ? [p.math, p.math.childNodes.length] : [p.math, 0]; // whole formula
     const off = Math.min(Math.max(pos, p.start), p.end) - p.start;
     return [p.node, p.nodeStart + off];
   }
@@ -317,7 +348,7 @@
     if (pageIdx) {
       // group sentences into blocks (paragraph / heading / list item ...)
       const blocks = [];
-      const nodeIdx = new Map(pieces.map((p, i) => [p.node, i]));
+      const nodeIdx = new Map(pieces.map((p, i) => [p.math || p.node, i])); // formulas keyed by element
       let pi = 0;
       pageIdx.segs.forEach((s, i) => {
         while (pi + 1 < pieces.length && pieces[pi].end <= s.start) pi++;
@@ -375,13 +406,14 @@
     if (!c) return -1;
     let [node, off] = c;
     if (node.nodeType !== 3) { node = node.childNodes[off] || node; off = 0; }
-    const pi = pageIdx.nodeIdx.get(node);
+    const me = mathOf(node.nodeType === 1 ? node : node.parentElement);
+    const pi = pageIdx.nodeIdx.get(me || node);
     if (pi === undefined) return -1;
     // the caret snaps to the nearest text even in margins: require the point to be on the block
     const p = pageIdx.pieces[pi];
     const r = p.block.getBoundingClientRect();
     if (x < r.left - 4 || x > r.right + 4 || y < r.top - 4 || y > r.bottom + 4) return -1;
-    const pos = p.start + Math.max(0, Math.min(off - p.nodeStart, p.end - p.start));
+    const pos = p.math ? p.start : p.start + Math.max(0, Math.min(off - p.nodeStart, p.end - p.start));
     let lo = 0, hi = pageIdx.segs.length - 1;
     while (lo < hi) { const m = (lo + hi) >> 1; if (pageIdx.segs[m].end < pos) lo = m + 1; else hi = m; }
     return pageIdx.segs[lo] ? pageIdx.segs[lo].block : -1;

@@ -67,11 +67,13 @@ async function toOffscreen(msg) {
 async function startSession(segments, tabId, frameId, id = crypto.randomUUID()) {
   const s = await settings();
   const lexRules = ttsParseLex(s.lex);
-  await chrome.storage.session.set({ session: { id, tabId, frameId } });
+  const spoken = segments.map((t) => ttsLex(t, lexRules, s.autoAcronyms));
+  // lastSpoken: what was sent to the voice server (tests + debugging pronunciation)
+  await chrome.storage.session.set({ session: { id, tabId, frameId }, lastSpoken: spoken.slice(0, 50) });
   await toOffscreen({
     type: "play",
     id,
-    segments: segments.map((t) => ttsLex(t, lexRules, s.autoAcronyms)),
+    segments: spoken,
     base: s.servers[s.voice],
     voice: s.voice,
     rate: s.rate,
@@ -99,7 +101,7 @@ async function readInTab(tab, frameId, text) {
       await chrome.scripting.insertCSS({ target: { tabId: tab.id, allFrames: true }, files: ["highlight.css"] });
       await chrome.scripting.executeScript({
         target: { tabId: tab.id, allFrames: true },
-        files: ["segment.js", "content.js"],
+        files: ["segment.js", "math.js", "content.js"],
       });
       const r = await send();
       if (r && r.ok) return;
@@ -120,7 +122,7 @@ async function pickInTab(tabId, frameId = 0) {
   try { await send(); } catch {
     try { // tab opened before install: inject, then retry
       await chrome.scripting.insertCSS({ target: { tabId, allFrames: true }, files: ["highlight.css"] });
-      await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["segment.js", "content.js"] });
+      await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["segment.js", "math.js", "content.js"] });
       await send();
     } catch {}
   }
@@ -191,7 +193,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
 // Unpacked extensions serve their files straight from disk, so the worker can fetch its own
 // files, notice an edit, and chrome.runtime.reload() itself. On reload ("update"), the content
 // script is re-injected into open tabs, so no tab refresh is needed either.
-const WATCH = ["manifest.json", "background.js", "content.js", "segment.js", "offscreen.js",
+const WATCH = ["manifest.json", "background.js", "content.js", "segment.js", "math.js", "offscreen.js",
   "offscreen.html", "popup.html", "popup.js", "highlight.css"];
 
 async function fingerprint() {
@@ -217,7 +219,7 @@ async function reinjectTabs() {
   const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*", "file:///*"] });
   for (const t of tabs) {
     chrome.scripting.insertCSS({ target: { tabId: t.id, allFrames: true }, files: ["highlight.css"] }).catch(() => {});
-    chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ["segment.js", "content.js"] }).catch(() => {});
+    chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ["segment.js", "math.js", "content.js"] }).catch(() => {});
   }
 }
 
