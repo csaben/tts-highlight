@@ -1,9 +1,10 @@
-// MathML -> speech: every formula in the TM 4-bit post (saved fixture) plus common notation
+// MathML -> speech: every formula in the TM 4-bit post (downloaded once to fixtures/) plus common notation
 // rendered through KaTeX. Prints each and fails on any that still contain raw symbols.
 import { chromium } from "playwright"; import fs from "node:fs"; import path from "node:path";
+import { tmPost } from "./fixture.mjs";
 const dir = import.meta.dirname;
 const b = await chromium.launch(); const p = await b.newPage();
-await p.setContent(fs.readFileSync(path.join(dir, "fixtures/tm-4bit.html"), "utf8"));
+await p.setContent(await tmPost());
 await p.addScriptTag({ path: path.join(dir, "../extension/math.js") });
 await p.addScriptTag({ url: "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" });
 const extra = String.raw`\frac{a}{b} ; \frac{x+1}{2} ; \sqrt{x} ; \sqrt[3]{x} ; \sum_{i=1}^{n} x_i ; x^2 ; e^{-x^2} ;

@@ -1,9 +1,10 @@
 // On the saved TM 4-bit post: picking the paragraph with 2^{-10} sends "2 to the minus 10"
 // (once, not doubled with the visual copy) to the voice server, and highlights the formula.
 import { chromium } from "playwright";
+import { tmPost } from "./fixture.mjs";
 import path from "node:path"; import os from "node:os"; import fs from "node:fs";
 const ext = path.resolve(import.meta.dirname, "../extension");
-const html = fs.readFileSync(path.join(import.meta.dirname, "fixtures/tm-4bit.html"), "utf8")
+const html = (await tmPost())
   .replace("</head>", `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"><style>body{max-width:760px;margin:auto;font:18px/1.6 serif}</style></head>`);
 const ctx = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), "tts-m-")), {
   headless: false, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, "--headless=new", "--autoplay-policy=no-user-gesture-required"] });

@@ -26,12 +26,18 @@ needed if background.js is broken badly enough that the watcher never runs.
 - `test/e2e.mjs`: Playwright Chromium loads the unpacked extension and checks highlights move.
   `cd test && PLAYWRIGHT_BROWSERS_PATH=$PWD/.browsers node e2e.mjs clark|baldree`
 
-## Servers (cradle, tailnet, no auth)
+## Servers (GPU box on a private network, no auth)
+
+Server URLs are not in the repo: copy `extension/config.example.js` to
+`extension/config.local.js` (gitignored) and fill in your hosts, or set them in popup →
+Servers. Without either, it defaults to `http://localhost:50300` / `:50301`. This repo is
+public: never commit hostnames, IPs, usernames or keys.
 
 - Clark: `clark-voice.service`, :50300, GPU 0, `ckpt/clark`.
 - Baldree: `baldree-voice.service`, :50301, GPU 1, `ckpt/baldree` (unit created 2026-11-13 by
-  copying clark-voice's unit). Versioned copy in `cradle/baldree-voice.service`; to reinstall:
-  `scp cradle/baldree-voice.service <user>@<gpu-host>:.config/systemd/user/` then
+  copying clark-voice's unit). Versioned copy in `cradle/baldree-voice.service` (uses `%h`
+  for home, `%H` for hostname); to reinstall: `scp cradle/baldree-voice.service
+  <user>@<gpu-host>:.config/systemd/user/` then
   `systemctl --user daemon-reload && systemctl --user enable --now baldree-voice`. Its `/llms.txt` still says "Clark" because the text is hardcoded
   in `tts_dots/service.py`.
 - Both are `~/Code/tts-workspace/dots-tts` `python -m tts_dots.service`, `POST /synthesize`.
@@ -69,7 +75,7 @@ and hidden MathML copy aren't read twice. Plain letters are left as letters (whi
 "x sub q" fine either way); only "a" becomes "ay". Math written as plain text (`x²`, `10⁻⁵`,
 `2^-10`, `1e-5`, `×`, `≈`, `≤`, `~5%`) is handled by `plainMath()` in `segment.js`, under the
 "spell out acronyms and math symbols" toggle. `test/math.mjs` prints every conversion (TM
-post fixture + common notation) and fails on leftover raw symbols; `test/mathpage.mjs` runs
+post, downloaded once to the gitignored `test/fixtures/` by `test/fixture.mjs`, + common notation) and fails on leftover raw symbols; `test/mathpage.mjs` runs
 the real post end to end, reading what was sent via `chrome.storage.session.lastSpoken`.
 
 ## Pronunciation

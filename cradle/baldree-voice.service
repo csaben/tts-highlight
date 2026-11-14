@@ -13,7 +13,7 @@ WorkingDirectory=%h/Code/tts-workspace/dots-tts
 Environment=CUDA_VISIBLE_DEVICES=1
 Environment=DOTS_PORT=50301
 Environment=DOTS_MODEL=%h/Code/tts-workspace/dots-tts/ckpt/baldree
-Environment=DOTS_PUBLIC_URL=http://localhost:50301
+Environment=DOTS_PUBLIC_URL=http://%H:50301
 Environment=DOTS_IDLE_UNLOAD=0
 Environment=DOTS_PRELOAD=1
 Environment=DOTS_OPTIMIZE=1

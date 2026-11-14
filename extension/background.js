@@ -1,4 +1,6 @@
 importScripts("segment.js");
+// Server URLs live in config.local.js (gitignored; see config.example.js).
+try { importScripts("config.local.js"); } catch {}
 
 const DEFAULTS = {
   voice: "clark",
@@ -9,6 +11,7 @@ const DEFAULTS = {
   servers: {
     clark: "http://localhost:50300",
     baldree: "http://localhost:50301",
+    ...(self.TTS_SERVERS || {}),
   },
 };
 const VOICE_NAMES = { clark: "Clark", baldree: "Baldree" };
@@ -194,7 +197,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
 // files, notice an edit, and chrome.runtime.reload() itself. On reload ("update"), the content
 // script is re-injected into open tabs, so no tab refresh is needed either.
 const WATCH = ["manifest.json", "background.js", "content.js", "segment.js", "math.js", "offscreen.js",
-  "offscreen.html", "popup.html", "popup.js", "highlight.css"];
+  "offscreen.html", "popup.html", "popup.js", "highlight.css", "config.local.js"];
 
 async function fingerprint() {
   const parts = await Promise.all(WATCH.map((f) =>

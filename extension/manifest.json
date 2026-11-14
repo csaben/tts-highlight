@@ -3,7 +3,7 @@
   "name": "Read Aloud (Clark / Baldree)",
   "short_name": "Read Aloud",
   "version": "0.1.0",
-  "description": "Highlight text, right-click, and hear it in Clark's or Travis Baldree's voice from cradle's GPUs, at your speed, with word highlighting.",
+  "description": "Highlight text, right-click, and hear it in Clark's or Travis Baldree's voice from your own TTS servers, at your speed, with word highlighting.",
   "permissions": [
     "contextMenus",
     "offscreen",
@@ -13,8 +13,7 @@
     "alarms"
   ],
   "host_permissions": [
-    "<all_urls>",
-    "http://localhost/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"

@@ -1,2 +1,4 @@
 test/node_modules/
 test/.browsers/
+extension/config.local.js
+test/fixtures/tm-4bit.html
