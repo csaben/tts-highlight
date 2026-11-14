@@ -12,6 +12,14 @@ const page = await ctx.newPage();
 await page.route("http://test.local/**", (r) => r.fulfill({ contentType: "text/html", body: "<p id=t style='width:500px'>One sentence here. Another one.</p>" }));
 await page.goto("http://test.local/");
 await page.waitForTimeout(2500);
+const errors = [];
+page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+// start a read so there is a live player when the reload hits
+{
+  const b0 = await page.locator("#t").boundingBox();
+  await page.keyboard.down("Alt"); await page.mouse.click(b0.x + 20, b0.y + b0.height / 2); await page.keyboard.up("Alt");
+  await page.locator("div.p").waitFor({ timeout: 10000 });
+}
 const boot1 = await sw.evaluate(() => performance.timeOrigin);
 
 const file = path.join(ext, "highlight.css");
@@ -29,6 +37,7 @@ try {
 } finally { fs.writeFileSync(file, orig); }
 check(reloaded, `extension reloaded itself after a file edit (${Date.now() - t0} ms)`);
 await page.waitForTimeout(1500);
+check((await page.locator("div.p").count()) === 0, "player from before the reload is removed");
 
 const b = await page.locator("#t").boundingBox();
 await page.mouse.move(b.x + 20, b.y + b.height / 2);
@@ -40,4 +49,7 @@ await page.waitForFunction(() => CSS.highlights.has("tts-sentence"), null, { tim
 const players = await page.locator("div.p").count();
 check(players === 1, `reading works after reload, one player (${players})`);
 await page.locator('div.p button[data-a="stop"]').click().catch(() => {});
+await page.waitForTimeout(500);
+const bad = errors.filter((e) => /context invalidated/i.test(e));
+check(bad.length === 0, `no "Extension context invalidated" errors (${bad.length})`);
 await ctx.close(); process.exit(fails.length ? 1 : 0);

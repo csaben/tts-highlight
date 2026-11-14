@@ -7,6 +7,16 @@
   document.dispatchEvent(new CustomEvent("tts-read-aloud-reset"));
   const life = new AbortController();
   const sig = { capture: true, signal: life.signal };
+  // After a reload this copy's chrome.* calls throw "Extension context invalidated".
+  const alive = () => { try { return !!chrome.runtime?.id; } catch { return false; } };
+  // Sweep leftovers from older copies that predate the reset event (player + highlights).
+  for (const el of document.documentElement.children) {
+    if (el.dataset && el.dataset.ttsPlayer !== undefined) el.remove();
+    else if (el.shadowRoot && el.shadowRoot.querySelector("button.voice[title='Switch voice']")) el.remove();
+  }
+  if (typeof CSS !== "undefined" && CSS.highlights) {
+    for (const n of ["tts-sentence", "tts-word", "tts-indexed", "tts-preview"]) CSS.highlights.delete(n);
+  }
 
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "OPTION", "TEMPLATE"]);
   const INLINE = new Set(["inline", "inline-block", "inline-flex", "contents", "ruby", "inline-grid"]);
@@ -172,6 +182,7 @@
   function player(anchor) {
     if (ui) return ui;
     const host = document.createElement("div");
+    host.dataset.ttsPlayer = "";
     host.style.cssText = "all:initial;position:fixed;z-index:2147483647;right:18px;bottom:18px;";
     if (anchor && anchor.side) {
       // read-from-here: park at the right edge, level with the click, out of the text
@@ -275,7 +286,9 @@
   }
 
   function send(m) {
-    return chrome.runtime.sendMessage({ type: "tts-control", ...m }).catch(() => {});
+    if (!alive()) return teardown();
+    try { return chrome.runtime.sendMessage({ type: "tts-control", ...m }).catch(() => {}); }
+    catch { teardown(); }
   }
 
   function finish() {
@@ -433,6 +446,7 @@
     if (previewOn && !hoverRaf) hoverRaf = requestAnimationFrame(paintHover);
   }, sig);
   window.addEventListener("keydown", (e) => {
+    if (!alive()) return teardown();
     if (e.key === "Alt" && !e.repeat && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
       clearTimeout(altTimer);
       altTimer = setTimeout(showPreview, 150); // a quick Alt+Shift+R etc. never flashes it
@@ -446,6 +460,7 @@
   // Alt+click on an indexed block: read from the start of that block to the end of the page
   document.addEventListener("click", (e) => {
     if (!e.altKey || e.shiftKey || e.ctrlKey || e.metaKey || e.button !== 0) return;
+    if (!alive()) return teardown(); // let the click through untouched
     const t = e.target;
     if (t && t.closest && t.closest("input, textarea, select, [contenteditable=true]")) return;
     const b = blockAt(e.clientX, e.clientY);
@@ -472,6 +487,7 @@
   }
 
   async function startDoc(d, anchor) {
+    if (!alive()) return teardown();
     finish();
     doc = d;
     const p = player(anchor);
@@ -518,12 +534,14 @@
   }
   chrome.runtime.onMessage.addListener(onMessage);
 
-  document.addEventListener("tts-read-aloud-reset", () => {
+  function teardown() {
+    if (life.signal.aborted) return;
     life.abort();
     if (pageObserver) pageObserver.disconnect();
     clearTimeout(idxTimer);
     hidePreview();
     finish();
     try { chrome.runtime.onMessage.removeListener(onMessage); } catch {}
-  }, { signal: life.signal });
+  }
+  document.addEventListener("tts-read-aloud-reset", teardown, { signal: life.signal });
 })();
