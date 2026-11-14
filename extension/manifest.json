@@ -4,32 +4,70 @@
   "short_name": "Read Aloud",
   "version": "0.1.0",
   "description": "Highlight text, right-click, and hear it in Clark's or Travis Baldree's voice from cradle's GPUs, at your speed, with word highlighting.",
-  "permissions": ["contextMenus", "offscreen", "storage", "scripting", "tabs", "alarms"],
-  "host_permissions": ["<all_urls>", "http://localhost/*"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "contextMenus",
+    "offscreen",
+    "storage",
+    "scripting",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["segment.js", "content.js"],
-      "css": ["highlight.css"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "segment.js",
+        "content.js"
+      ],
+      "css": [
+        "highlight.css"
+      ],
       "all_frames": true,
       "run_at": "document_idle"
     }
   ],
-  "action": { "default_popup": "popup.html", "default_title": "Read Aloud settings" },
-  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Read Aloud settings"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
   "commands": {
     "read-selection": {
-      "suggested_key": { "default": "Alt+Shift+R" },
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
       "description": "Read the selected text aloud"
     },
     "stop-reading": {
-      "suggested_key": { "default": "Alt+Shift+X" },
+      "suggested_key": {
+        "default": "Alt+Shift+X"
+      },
       "description": "Stop reading"
     },
     "toggle-pause": {
-      "suggested_key": { "default": "Alt+Shift+P" },
+      "suggested_key": {
+        "default": "Alt+Shift+P"
+      },
       "description": "Pause / resume"
+    },
+    "pick-block": {
+      "suggested_key": {
+        "default": "Alt+Shift+B"
+      },
+      "description": "Pick a block on the page to read from"
     }
   }
 }

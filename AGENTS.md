@@ -41,7 +41,9 @@ needed if background.js is broken badly enough that the watcher never runs.
 
 Each frame indexes its page into sentences on idle (re-indexes 1 s after DOM mutations),
 skipping `nav, footer, aside, pre, code, [aria-hidden]`, and groups sentences into blocks
-(nearest non-inline ancestor: paragraph, heading, list item). Holding Alt (150 ms, so shortcuts
+(nearest non-inline ancestor: paragraph, heading, list item). **Pick mode** (right-click page → "Pick where to read", Alt+Shift+B, or the popup button) shows
+the same preview and keeps it up with a banner; a plain click on a block starts reading
+(links inside don't navigate), Esc / ✕ cancels. Holding Alt (150 ms, so shortcuts
 don't flash it) previews: dotted blue underline = everything indexed, blue fill = the block
 under the mouse. Alt+click (or right-click, no selection → "Read from here") starts at the
 *start of that block* and continues to the end of the page; the player parks at the right edge

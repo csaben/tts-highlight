@@ -22,7 +22,8 @@
   textarea { width:100%; box-sizing:border-box; margin-top:6px; font:12px ui-monospace, monospace; padding:6px;
     border:1px solid var(--line); border-radius:5px; background:none; color:var(--fg); resize:vertical; }
   .chk { display:flex; flex-direction:row; align-items:center; gap:6px; margin-top:6px; color:var(--fg); }
-  #stop { padding:7px; border-radius:7px; border:1px solid var(--line); background:none; color:var(--fg); cursor:pointer; font:inherit; }
+  .btn { flex:1; }
+  #pick, #stop { padding:7px; border-radius:7px; border:1px solid var(--line); background:none; color:var(--fg); cursor:pointer; font:inherit; }
 </style>
 </head>
 <body>
@@ -37,7 +38,7 @@
   <label>Default speed <span class="rv" id="rv"></span>
     <input type="range" id="rate" min="0.5" max="4" step="0.25" />
   </label>
-  <button id="stop">Stop reading</button>
+  <div class="row"><button id="pick" class="btn">Pick where to read</button><button id="stop" class="btn">Stop</button></div>
   <details id="pron">
     <summary>Pronunciation</summary>
     <label class="chk"><input type="checkbox" id="auto" /> Spell out acronyms (ASI → A.S.I.)</label>
@@ -45,7 +46,7 @@
     <div class="hint">One per line: <b>word = how to say it</b>. Applies from the next read.</div>
   </details>
   <div class="hint">Select text → right-click → <b>Read aloud</b>, or press <b>Alt+Shift+R</b>.
-    <b>Alt+click</b> any text (or right-click → Read from here) to read the rest of the page.
+    <b>Pick where to read</b> (right-click the page, or Alt+Shift+B) shows the readable blocks; click one to start. Holding Alt shows the same preview.
     Alt+Shift+P pauses, Alt+Shift+X stops. Change keys at chrome://extensions/shortcuts.</div>
   <details>
     <summary>Servers</summary>

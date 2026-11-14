@@ -59,4 +59,5 @@ $("#lex").oninput = (e) => {
   clearTimeout(lexTimer);
   lexTimer = setTimeout(() => chrome.storage.sync.set({ lex: e.target.value }), 300);
 };
+$("#pick").onclick = () => { chrome.runtime.sendMessage({ type: "tts-pick-active" }); window.close(); };
 $("#stop").onclick = () => chrome.runtime.sendMessage({ type: "tts-control", action: "stop" });

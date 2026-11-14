@@ -23,13 +23,13 @@ async function updateMenu() {
   const s = await settings();
   const title = `Read aloud: ${VOICE_NAMES[s.voice] || s.voice} ${s.rate}×`;
   chrome.contextMenus.update("tts-read", { title }, () => void chrome.runtime.lastError);
-  chrome.contextMenus.update("tts-here", { title: `Read from here: ${VOICE_NAMES[s.voice] || s.voice} ${s.rate}×` }, () => void chrome.runtime.lastError);
+  chrome.contextMenus.update("tts-here", { title: `Pick where to read: ${VOICE_NAMES[s.voice] || s.voice} ${s.rate}×` }, () => void chrome.runtime.lastError);
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({ id: "tts-read", title: "Read aloud", contexts: ["selection"] });
-    chrome.contextMenus.create({ id: "tts-here", title: "Read from here", contexts: ["page"] });
+    chrome.contextMenus.create({ id: "tts-here", title: "Pick where to read", contexts: ["page"] });
     updateMenu();
   });
 });
@@ -110,15 +110,24 @@ async function readInTab(tab, frameId, text) {
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab) return;
-  if (info.menuItemId === "tts-here") {
-    chrome.tabs.sendMessage(tab.id, { type: "tts-start-here" }, { frameId: info.frameId ?? 0 }).catch(() => {});
-    return;
-  }
+  if (info.menuItemId === "tts-here") return pickInTab(tab.id, info.frameId ?? 0);
   if (info.menuItemId !== "tts-read") return;
   readInTab(tab, info.frameId ?? 0, info.selectionText);
 });
 
+async function pickInTab(tabId, frameId = 0) {
+  const send = () => chrome.tabs.sendMessage(tabId, { type: "tts-pick" }, { frameId });
+  try { await send(); } catch {
+    try { // tab opened before install: inject, then retry
+      await chrome.scripting.insertCSS({ target: { tabId, allFrames: true }, files: ["highlight.css"] });
+      await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["segment.js", "content.js"] });
+      await send();
+    } catch {}
+  }
+}
+
 chrome.commands.onCommand.addListener(async (cmd, tab) => {
+  if (cmd === "pick-block" && tab) return pickInTab(tab.id);
   if (cmd === "stop-reading") return control({ action: "stop" });
   if (cmd === "toggle-pause") return control({ action: "toggle" });
   if (cmd === "read-selection" && tab) readInTab(tab, null, "");
@@ -166,6 +175,10 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
   }
   if (m.type === "tts-event") {
     relay(m);
+    return;
+  }
+  if (m.type === "tts-pick-active") {
+    chrome.tabs.query({ active: true, currentWindow: true }).then(([t]) => t && pickInTab(t.id));
     return;
   }
   if (m.type === "tts-settings") {

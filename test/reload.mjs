@@ -36,7 +36,12 @@ try {
   }
 } finally { fs.writeFileSync(file, orig); }
 check(reloaded, `extension reloaded itself after a file edit (${Date.now() - t0} ms)`);
-await page.waitForTimeout(1500);
+// restoring the file triggers a second reload; wait until the worker stays the same for 3 s
+for (let last = null, since = Date.now(); Date.now() - since < 3000; await page.waitForTimeout(250)) {
+  const o = await ctx.serviceWorkers().at(-1).evaluate(() => performance.timeOrigin).catch(() => null);
+  if (o !== last) { last = o; since = Date.now(); }
+}
+await page.waitForTimeout(500);
 check((await page.locator("div.p").count()) === 0, "player from before the reload is removed");
 
 const b = await page.locator("#t").boundingBox();

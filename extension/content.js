@@ -432,42 +432,84 @@
     hoverBlock = -2;
     paintHover();
   }
-  function hidePreview() {
+  function hidePreview(force) {
     clearTimeout(altTimer);
-    if (!previewOn) return;
+    if (!previewOn || (pickMode && force !== true)) return; // pick mode stays up until Esc / pick
+    if (pickMode) endPick();
     previewOn = false;
     hoverBlock = -1;
     document.documentElement.style.cursor = "";
     if (hasHL) { CSS.highlights.delete("tts-indexed"); CSS.highlights.delete("tts-preview"); }
   }
 
+  // ---- pick mode: same preview, but it stays on and a plain click starts reading ----------
+
+  let pickMode = false, banner = null;
+  function startPick() {
+    if (!document.body) return;
+    pickMode = true;
+    previewOn = false; // force a fresh paint
+    showPreview();
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.dataset.ttsPlayer = "";
+      banner.style.cssText = "all:initial;position:fixed;z-index:2147483647;top:14px;left:50%;transform:translateX(-50%);";
+      const sh = banner.attachShadow({ mode: "open" });
+      sh.innerHTML = `<style>
+          .b{font:13px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;display:flex;align-items:center;gap:10px;
+             background:#16161a;color:#f2f2f2;border-radius:999px;padding:7px 8px 7px 14px;box-shadow:0 6px 24px #0006}
+          i{font-style:normal;color:#7fb2ff;font-weight:600}
+          button{all:unset;cursor:pointer;width:24px;height:24px;border-radius:999px;display:grid;place-items:center}
+          button:hover{background:#ffffff1c}
+        </style>
+        <div class="b"><span><i>Click a highlighted block</i> to read from there · Esc to cancel</span>
+          <button title="Cancel (Esc)">✕</button></div>`;
+      sh.querySelector("button").addEventListener("click", () => hidePreview(true));
+      document.documentElement.appendChild(banner);
+    }
+    if (pageIdx && !pageIdx.blocks.length) banner.shadowRoot.querySelector("span").textContent = "Nothing readable found on this page";
+  }
+  function endPick() {
+    pickMode = false;
+    if (banner) { banner.remove(); banner = null; }
+  }
+
   document.addEventListener("pointermove", (e) => {
     mouse = [e.clientX, e.clientY];
     if (previewOn && !hoverRaf) hoverRaf = requestAnimationFrame(paintHover);
   }, sig);
+  // the block under a still mouse changes as the page scrolls
+  window.addEventListener("scroll", () => {
+    if (previewOn && !hoverRaf) hoverRaf = requestAnimationFrame(paintHover);
+  }, sig);
   window.addEventListener("keydown", (e) => {
     if (!alive()) return teardown();
+    if (pickMode) {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hidePreview(true); }
+      return; // scrolling keys etc. keep pick mode up
+    }
     if (e.key === "Alt" && !e.repeat && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
       clearTimeout(altTimer);
       altTimer = setTimeout(showPreview, 150); // a quick Alt+Shift+R etc. never flashes it
     } else if (e.key !== "Alt") hidePreview();
   }, sig);
   window.addEventListener("keyup", (e) => { if (e.key === "Alt") hidePreview(); }, sig);
-  window.addEventListener("blur", hidePreview, sig);
+  window.addEventListener("blur", () => hidePreview(), sig);
 
   let lastCtx = null;
   document.addEventListener("contextmenu", (e) => (lastCtx = [e.clientX, e.clientY]), sig);
-  // Alt+click on an indexed block: read from the start of that block to the end of the page
+  // Click a block in pick mode (or Alt+click any time): read from the start of that block on
   document.addEventListener("click", (e) => {
-    if (!e.altKey || e.shiftKey || e.ctrlKey || e.metaKey || e.button !== 0) return;
+    if (!(e.altKey || pickMode) || e.shiftKey || e.ctrlKey || e.metaKey || e.button !== 0) return;
     if (!alive()) return teardown(); // let the click through untouched
     const t = e.target;
+    if (t && t.dataset && t.dataset.ttsPlayer !== undefined) return; // our banner / player
     if (t && t.closest && t.closest("input, textarea, select, [contenteditable=true]")) return;
     const b = blockAt(e.clientX, e.clientY);
     if (b < 0) return;
-    e.preventDefault(); // Alt+click on a link would otherwise download it
+    e.preventDefault(); // a link click would otherwise navigate / Alt+click download
     e.stopPropagation();
-    hidePreview();
+    hidePreview(true);
     readBlock(b, e.clientY);
   }, sig);
 
@@ -511,6 +553,11 @@
       start(m.text).then((ok) => reply({ ok }), (e) => { console.error("[tts]", e); reply({ ok: false, error: String(e) }); });
       return true;
     }
+    if (m.type === "tts-pick") {
+      startPick();
+      reply({ ok: true });
+      return;
+    }
     if (m.type === "tts-start-here") {
       if (!lastCtx || !document.hasFocus()) return false;
       readFrom(lastCtx[0], lastCtx[1]).then((ok) => reply({ ok }), () => reply({ ok: false }));
@@ -539,7 +586,7 @@
     life.abort();
     if (pageObserver) pageObserver.disconnect();
     clearTimeout(idxTimer);
-    hidePreview();
+    hidePreview(true);
     finish();
     try { chrome.runtime.onMessage.removeListener(onMessage); } catch {}
   }
