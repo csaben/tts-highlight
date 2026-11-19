@@ -56,6 +56,12 @@ under the mouse. Alt+click (or right-click, no selection → "Read from here") s
 level with the click. Only audio is lazy: offscreen fetches 3 sentences ahead.
 `test/fromhere.mjs` covers it.
 
+**Site rules** (`SITE_ONLY` in content.js): on some sites the page index reads only matching
+elements. X/Twitter reads only `[data-testid="tweetText"]`, so a thread plays post after post
+without names, handles, times or reply/like/view counts. X only has the posts you've scrolled
+past (plus a few ahead) in the DOM, so reading stops at the last loaded post. A `<br>` inside a
+block counts as a line break. `test/xthread.mjs` covers it.
+
 Player drag: pointerdown anywhere on the pill (buttons too); past 4 px it becomes a drag and
 the click is swallowed. Move/up listeners are on `window`, not the pill, or a fast first move
 escapes the pill and nothing happens.

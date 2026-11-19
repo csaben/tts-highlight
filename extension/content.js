@@ -22,6 +22,12 @@
   const INLINE = new Set(["inline", "inline-block", "inline-flex", "contents", "ruby", "inline-grid"]);
   // page index skips chrome around the article and code blocks
   const PAGE_SKIP = "nav, footer, aside, pre, code, [role=navigation], [aria-hidden=true], [contenteditable=true]";
+  // Sites where the page index reads only the post text, so a thread plays as one stream without
+  // names, handles, timestamps or reply/like/view counts in between.
+  const SITE_ONLY = [
+    [/(^|\.)(x|twitter)\.com$/, '[data-testid="tweetText"]'],
+  ];
+  const PAGE_ONLY = (SITE_ONLY.find(([re]) => re.test(location.hostname)) || [])[1] || null;
   const hasHL = typeof Highlight !== "undefined" && CSS.highlights;
 
   let doc = null; // {full, pieces, segs:[{start,end,words:[{start,end,w}]}]}
@@ -56,6 +62,7 @@
         const p = n.parentElement;
         if (!p || SKIP.has(p.tagName)) return NodeFilter.FILTER_REJECT;
         if (page && p.closest(PAGE_SKIP)) return NodeFilter.FILTER_REJECT;
+        if (page && PAGE_ONLY && !p.closest(PAGE_ONLY)) return NodeFilter.FILTER_REJECT;
         if (p.checkVisibility && !p.checkVisibility()) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       },
@@ -82,12 +89,22 @@
       const b = n === range.endContainer ? range.endOffset : n.data.length;
       if (b <= a) continue;
       const block = blockOf(n.parentElement, cache);
-      if (prevBlock && block !== prevBlock) full += "\n";
+      if (prevBlock && (block !== prevBlock || afterBr(n, block))) full += "\n";
       prevBlock = block;
       pieces.push({ node: n, nodeStart: a, start: full.length, end: full.length + (b - a), block });
       full += n.data.slice(a, b);
     }
     return { full, pieces };
+  }
+
+  // a <br> right before this text (possibly at an ancestor level within the block) = line break
+  function afterBr(n, block) {
+    for (let e = n; e && e !== block; e = e.parentNode) {
+      let s = e.previousSibling;
+      while (s && s.nodeType === 3 && !s.data.trim()) s = s.previousSibling;
+      if (s) return s.nodeName === "BR";
+    }
+    return false;
   }
 
   const MATH_ROOTS = [".katex", "mjx-container", "math"];
