@@ -3,6 +3,69 @@
 const LOOKAHEAD = 3;
 let S = null;
 
+// ---- audio cache ------------------------------------------------------------------------
+// Audio already synthesized, keyed by server + steps + exact spoken text, so starting again
+// from another block (or re-reading a page later) plays those sentences instantly instead of
+// re-synthesizing. Stored in IndexedDB, because Chrome closes an audio offscreen document
+// after ~30 s of silence (and on restart). Least recently used goes first past CACHE_MAX.
+const CACHE_MAX = 500 * 1024 * 1024;
+const keyOf = (sess, i) => sess.base + "|" + sess.steps + "|" + sess.segments[i];
+let dbP = null, cacheBytes = -1;
+const req = (r) => new Promise((ok, no) => { r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
+function db() {
+  if (!dbP) {
+    const r = indexedDB.open("tts-audio", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("a", { keyPath: "k" }).createIndex("used", "used");
+    dbP = req(r).catch((e) => { dbP = null; throw e; });
+  }
+  return dbP;
+}
+async function cacheGet(k) {
+  try {
+    const st = (await db()).transaction("a", "readwrite").objectStore("a");
+    const v = await req(st.get(k));
+    if (!v) return null;
+    v.used = Date.now();
+    st.put(v); // touch for LRU
+    return { blob: v.blob, dur: v.dur };
+  } catch { return null; }
+}
+async function cachePut(k, v) {
+  try {
+    const d = await db();
+    if (cacheBytes < 0) { // first write since startup: total up what's stored
+      cacheBytes = 0;
+      const all = await req(d.transaction("a").objectStore("a").getAll());
+      for (const e of all) cacheBytes += e.size;
+    }
+    const st = d.transaction("a", "readwrite").objectStore("a");
+    const old = await req(st.get(k));
+    if (old) cacheBytes -= old.size;
+    await req(st.put({ k, blob: v.blob, dur: v.dur, size: v.blob.size, used: Date.now() }));
+    cacheBytes += v.blob.size;
+    if (cacheBytes <= CACHE_MAX) return;
+    const ev = d.transaction("a", "readwrite").objectStore("a");
+    const cur = ev.index("used").openCursor();
+    await new Promise((ok) => {
+      cur.onsuccess = () => {
+        const c = cur.result;
+        if (!c || cacheBytes <= CACHE_MAX * 0.9) return ok();
+        cacheBytes -= c.value.size; c.delete(); c.continue();
+      };
+      cur.onerror = ok;
+    });
+  } catch {}
+}
+async function cacheStats() {
+  try {
+    const all = await req((await db()).transaction("a").objectStore("a").getAll());
+    return { entries: all.length, bytes: all.reduce((n, e) => n + e.size, 0) };
+  } catch (e) { return { error: String(e) }; }
+}
+async function cacheClear() {
+  try { await req((await db()).transaction("a", "readwrite").objectStore("a").clear()); cacheBytes = 0; } catch {}
+}
+
 function emit(type, extra = {}) {
   if (!S) return;
   chrome.runtime.sendMessage({ type: "tts-event", ev: type, id: S.id, ...extra }).catch(() => {});
@@ -36,9 +99,9 @@ async function doFetch(sess, i, signal) {
         signal,
       });
       if (!r.ok) throw new Error(`server ${r.status}: ${(await r.text()).slice(0, 200)}`);
-      const blob = await r.blob();
-      sess.durs[i] = parseFloat(r.headers.get("x-audio-duration")) || 0;
-      return URL.createObjectURL(blob);
+      const v = { blob: await r.blob(), dur: parseFloat(r.headers.get("x-audio-duration")) || 0 };
+      if (sess.useCache) cachePut(keyOf(sess, i), v);
+      return v;
     } catch (e) {
       lastErr = e;
       if (signal.aborted) throw e;
@@ -53,9 +116,15 @@ function pump() {
   for (let i = sess.idx; i < Math.min(sess.segments.length, sess.idx + LOOKAHEAD); i++) {
     if (sess.cache[i]) continue;
     const signal = sess.ctrl.signal;
-    const p = sess.chain.catch(() => {}).then(() => doFetch(sess, i, signal));
+    // cached sentences skip the server queue; misses join the sequential fetch chain
+    const p = (sess.useCache ? cacheGet(keyOf(sess, i)) : Promise.resolve(null)).then((hit) => {
+      if (hit) { sess.hits++; return hit; }
+      const f = sess.chain.catch(() => {}).then(() => doFetch(sess, i, signal));
+      sess.chain = f;
+      return f;
+    });
     p.catch(() => {});
-    sess.cache[i] = sess.chain = p;
+    sess.cache[i] = p;
   }
 }
 
@@ -68,9 +137,9 @@ async function playIdx(i) {
   const tok = (sess.tok = (sess.tok || 0) + 1);
   pump();
   emit("loading", { index: sess.idx, total: sess.segments.length, voice: sess.voice });
-  let url;
+  let res;
   try {
-    url = await sess.cache[sess.idx];
+    res = await sess.cache[sess.idx];
   } catch (e) {
     if (sess !== S || sess.tok !== tok) return;
     if (e.message === "skipped") { sess.cache[sess.idx] = null; return playIdx(sess.idx); }
@@ -78,7 +147,10 @@ async function playIdx(i) {
     return;
   }
   if (sess !== S || sess.tok !== tok) return; // skipped / stopped meanwhile
-  const a = new Audio(url);
+  sess.durs[sess.idx] = res.dur;
+  if (sess.url) URL.revokeObjectURL(sess.url);
+  sess.url = URL.createObjectURL(res.blob);
+  const a = new Audio(sess.url);
   a.preservesPitch = true;
   a.playbackRate = sess.rate;
   sess.audio = a;
@@ -95,7 +167,7 @@ async function playIdx(i) {
   if (sess.paused) segEvent();
   // drop audio we will not need again (keep one behind for "previous")
   for (let k = 0; k < sess.idx - 1; k++) {
-    if (sess.cache[k]) { sess.cache[k].then((u) => URL.revokeObjectURL(u), () => {}); sess.cache[k] = null; }
+    sess.cache[k] = null;
   }
 }
 
@@ -103,7 +175,6 @@ function resetFetches() {
   S.ctrl.abort();
   S.ctrl = new AbortController();
   S.chain = Promise.resolve();
-  for (const c of S.cache) if (c) c.then((u) => URL.revokeObjectURL(u), () => {});
   S.cache = [];
 }
 
@@ -111,22 +182,24 @@ function cleanup() {
   if (!S) return;
   if (S.audio) { S.audio.onended = null; S.audio.pause(); }
   S.ctrl.abort();
-  for (const c of S.cache) if (c) c.then((u) => URL.revokeObjectURL(u), () => {});
+  if (S.url) URL.revokeObjectURL(S.url);
   S = null;
 }
 
-chrome.runtime.onMessage.addListener((m) => {
+chrome.runtime.onMessage.addListener((m, _sender, reply) => {
   if (m.target !== "offscreen") return;
   if (m.type === "play") {
     if (S) { emit("stopped"); cleanup(); }
     S = {
       id: m.id, segments: m.segments, base: m.base, voice: m.voice, rate: m.rate, steps: m.steps,
       idx: 0, cache: [], durs: [], chain: Promise.resolve(), ctrl: new AbortController(),
-      audio: null, paused: false,
+      audio: null, paused: false, url: null, useCache: m.cache !== false, hits: 0,
     };
     playIdx(0);
     return;
   }
+  if (m.type === "cache-stats") { cacheStats().then((s) => reply({ ...s, hits: S ? S.hits : -1 })); return true; }
+  if (m.type === "cache-clear") { cacheClear().then(() => reply({ ok: true })); return true; }
   if (m.type !== "control" || !S) return;
   switch (m.action) {
     case "stop":

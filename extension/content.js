@@ -493,10 +493,14 @@
 
   // ---- pick mode: same preview, but it stays on and a plain click starts reading ----------
 
-  let pickMode = false, banner = null;
-  function startPick() {
+  // sticky = opened by tapping Alt: clicking a block reads from there and the mode stays up,
+  // so you can jump around; tap Alt again (or Esc / ✕) to close.
+  let pickMode = false, pickSticky = false, banner = null;
+  function startPick(sticky = false) {
     if (!document.body) return;
+    if (pickMode && pickSticky !== sticky) endPick(); // rebuild banner with the right text
     pickMode = true;
+    pickSticky = sticky;
     previewOn = false; // force a fresh paint
     showPreview();
     if (!banner) {
@@ -511,7 +515,7 @@
           button{all:unset;cursor:pointer;width:24px;height:24px;border-radius:999px;display:grid;place-items:center}
           button:hover{background:#ffffff1c}
         </style>
-        <div class="b"><span><i>Click a highlighted block</i> to read from there · Esc to cancel</span>
+        <div class="b"><span><i>Click a highlighted block</i> to read from there · ${sticky ? "Alt or Esc to close" : "Esc to cancel"}</span>
           <button title="Cancel (Esc)">✕</button></div>`;
       sh.querySelector("button").addEventListener("click", () => hidePreview(true));
       document.documentElement.appendChild(banner);
@@ -519,7 +523,7 @@
     if (pageIdx && !pageIdx.blocks.length) banner.shadowRoot.querySelector("span").textContent = "Nothing readable found on this page";
   }
   function endPick() {
-    pickMode = false;
+    pickMode = pickSticky = false;
     if (banner) { banner.remove(); banner = null; }
   }
 
@@ -531,18 +535,41 @@
   window.addEventListener("scroll", () => {
     if (previewOn && !hoverRaf) hoverRaf = requestAnimationFrame(paintHover);
   }, sig);
+  // Alt: hold to preview (Alt+click reads); a quick tap on its own toggles sticky pick mode
+  // (popup setting "Tap Alt to toggle", on by default).
+  const ALT_TAP_MS = 400;
+  let altToggle = true, altAt = 0, altClean = false;
+  try {
+    chrome.storage.sync.get({ altToggle: true }, (s) => { if (s) altToggle = s.altToggle; });
+    chrome.storage.onChanged.addListener((c, area) => {
+      if (area === "sync" && c.altToggle && alive()) altToggle = c.altToggle.newValue !== false;
+    });
+  } catch {}
   window.addEventListener("keydown", (e) => {
     if (!alive()) return teardown();
+    const bareAlt = e.key === "Alt" && !e.ctrlKey && !e.shiftKey && !e.metaKey;
+    if (bareAlt && !e.repeat) { altAt = Date.now(); altClean = true; }
+    else if (e.key !== "Alt") altClean = false;
     if (pickMode) {
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hidePreview(true); }
       return; // scrolling keys etc. keep pick mode up
     }
-    if (e.key === "Alt" && !e.repeat && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+    if (bareAlt && !e.repeat) {
       clearTimeout(altTimer);
       altTimer = setTimeout(showPreview, 150); // a quick Alt+Shift+R etc. never flashes it
     } else if (e.key !== "Alt") hidePreview();
   }, sig);
-  window.addEventListener("keyup", (e) => { if (e.key === "Alt") hidePreview(); }, sig);
+  window.addEventListener("keyup", (e) => {
+    if (e.key !== "Alt") return;
+    if (altToggle && altClean && Date.now() - altAt < ALT_TAP_MS) {
+      altClean = false;
+      e.preventDefault(); // keep Windows from moving focus to the browser menu
+      if (pickMode) hidePreview(true); else startPick(true);
+      return;
+    }
+    hidePreview();
+  }, sig);
+  document.addEventListener("pointerdown", () => (altClean = false), { capture: true, ...sig });
   window.addEventListener("blur", () => hidePreview(), sig);
 
   let lastCtx = null;
@@ -558,7 +585,7 @@
     if (b < 0) return;
     e.preventDefault(); // a link click would otherwise navigate / Alt+click download
     e.stopPropagation();
-    hidePreview(true);
+    if (!pickSticky) hidePreview(true); // sticky mode stays up for the next jump
     readBlock(b, e.clientY);
   }, sig);
 

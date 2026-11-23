@@ -48,6 +48,7 @@
   <div class="hint">Select text → right-click → <b>Read aloud</b>, or press <b>Alt+Shift+R</b>.
     <b>Pick where to read</b> (right-click the page, or Alt+Shift+B) shows the readable blocks; click one to start. Holding Alt shows the same preview.
     Alt+Shift+P pauses, Alt+Shift+X stops. Change keys at chrome://extensions/shortcuts.</div>
+  <label class="chk"><input type="checkbox" id="alttog" /> Tap Alt to show readable blocks; click any to jump there (stays up until you tap Alt again)</label>
   <details>
     <summary>Servers</summary>
     <label>Clark <input type="text" id="s-clark" /></label>
@@ -55,6 +56,8 @@
     <label>Quality (sampling steps, lower = faster) <span class="rv" id="stv"></span>
       <input type="range" id="steps" min="4" max="32" step="2" />
     </label>
+    <label class="chk"><input type="checkbox" id="cache" /> Reuse audio already made (instant re-reads)</label>
+    <div class="hint"><span id="cstat">…</span> <button id="cclear" type="button">Clear</button></div>
   </details>
 </main>
 <script src="popup.js"></script>

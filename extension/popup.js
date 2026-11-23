@@ -10,6 +10,8 @@ async function load() {
   $("#s-clark").value = s.servers.clark;
   $("#s-baldree").value = s.servers.baldree;
   $("#auto").checked = s.autoAcronyms;
+  $("#cache").checked = s.cache;
+  $("#alttog").checked = s.altToggle;
   if (document.activeElement !== $("#lex")) $("#lex").value = s.lex;
   if (s.lex) $("#pron").open = true;
   for (const v of ["clark", "baldree"]) health(v, s.servers[v]);
@@ -61,3 +63,13 @@ $("#lex").oninput = (e) => {
 };
 $("#pick").onclick = () => { chrome.runtime.sendMessage({ type: "tts-pick-active" }); window.close(); };
 $("#stop").onclick = () => chrome.runtime.sendMessage({ type: "tts-control", action: "stop" });
+
+$("#cache").onchange = (e) => chrome.storage.sync.set({ cache: e.target.checked });
+async function cacheStat(op = "stats") {
+  const r = await chrome.runtime.sendMessage({ type: "tts-cache", op });
+  if (op !== "stats") return cacheStat();
+  $("#cstat").textContent = r && !r.error ? `Cached: ${r.entries} sentences, ${(r.bytes / 1048576).toFixed(1)} MB` : "Cache unavailable";
+}
+$("#cclear").onclick = () => cacheStat("clear");
+cacheStat();
+$("#alttog").onchange = (e) => chrome.storage.sync.set({ altToggle: e.target.checked });

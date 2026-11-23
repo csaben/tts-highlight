@@ -8,6 +8,8 @@ const DEFAULTS = {
   steps: 16,
   lex: "",
   autoAcronyms: true,
+  altToggle: true, // tap Alt = sticky pick mode (content.js)
+  cache: true, // reuse audio already synthesized (offscreen.js, IndexedDB)
   servers: {
     clark: "http://localhost:50300",
     baldree: "http://localhost:50301",
@@ -81,6 +83,7 @@ async function startSession(segments, tabId, frameId, id = crypto.randomUUID()) 
     voice: s.voice,
     rate: s.rate,
     steps: s.steps,
+    cache: s.cache,
   });
   return { id, voice: s.voice, rate: s.rate };
 }
@@ -185,6 +188,10 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m.type === "tts-pick-active") {
     chrome.tabs.query({ active: true, currentWindow: true }).then(([t]) => t && pickInTab(t.id));
     return;
+  }
+  if (m.type === "tts-cache") { // popup: stats / clear
+    toOffscreen({ type: "cache-" + m.op }).then(reply, (e) => reply({ error: String(e) }));
+    return true;
   }
   if (m.type === "tts-settings") {
     settings().then(reply);
