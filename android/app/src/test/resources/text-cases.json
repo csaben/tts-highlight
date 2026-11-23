@@ -1,0 +1,105 @@
+{
+ "lex": "Nvidia = en-vidia\n# comment\nASAP = A.S.A.P.",
+ "out": [
+  {
+   "c": "Dr. Smith went to Washington. He arrived at 3.5 p.m. and left! Did he? Yes.",
+   "segs": [
+    [
+     0,
+     29
+    ],
+    [
+     30,
+     62
+    ],
+    [
+     63,
+     70
+    ],
+    [
+     71,
+     75
+    ]
+   ],
+   "lex": "Dr. Smith went to Washington. He arrived at 3.5 p.m. and left! Did he? Yes."
+  },
+  {
+   "c": "We recorded brain activity in people as they talked and listened, and the overlap between speaking and listening regions grew over the course of the conversation in ways we did not expect at all.\nSecond line here.",
+   "segs": [
+    [
+     0,
+     65
+    ],
+    [
+     66,
+     148
+    ],
+    [
+     149,
+     195
+    ],
+    [
+     196,
+     213
+    ]
+   ],
+   "lex": "We recorded brain activity in people as they talked and listened, and the overlap between speaking and listening regions grew over the course of the conversation in ways we did not expect at all.\nSecond line here."
+  },
+  {
+   "c": "The ASI is near. GPUs and NASA, CUDA too. x² and 10⁻⁵ and 2^-10 and 1e-5 and ~5% and a × b ≈ c.",
+   "segs": [
+    [
+     0,
+     16
+    ],
+    [
+     17,
+     41
+    ],
+    [
+     42,
+     95
+    ]
+   ],
+   "lex": "The A.S.I. is near. G.P.U.s and NASA, CUDA too. x squared and 10 to the minus 5 and 2 to the minus 10 and 1 e minus 5 and about 5% and a times b approximately c."
+  },
+  {
+   "c": "THIS IS SHOUTED TEXT FOR SURE OK.",
+   "segs": [
+    [
+     0,
+     33
+    ]
+   ],
+   "lex": "THIS IS SHOUTED TEXT FOR SURE OK."
+  },
+  {
+   "c": "J. R. R. Tolkien wrote books (and more). \"Quoted.\" Next one.",
+   "segs": [
+    [
+     0,
+     40
+    ],
+    [
+     41,
+     50
+    ],
+    [
+     51,
+     60
+    ]
+   ],
+   "lex": "J. R. R. Tolkien wrote books (and more). \"Quoted.\" Next one."
+  },
+  {
+   "c": "Nvidia ships it ASAP.",
+   "segs": [
+    [
+     0,
+     21
+    ]
+   ],
+   "lex": "en-vidia ships it A.S.A.P."
+  }
+ ]
+}

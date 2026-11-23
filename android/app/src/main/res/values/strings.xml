@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_summary">Reads the screen aloud in your own voices, highlighting as it goes</string>
+    <string name="a11y_desc">Read Aloud reads the text on screen (and text inside images, using on-device OCR) so it can speak it and highlight the sentence being read. Text is sent only to the voice servers set in the app. Tap the floating Aa bubble to pick where to start.</string>
+</resources>
